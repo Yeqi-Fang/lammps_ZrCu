@@ -15,8 +15,7 @@
 #SBATCH -e stderr.moduli.%A_%a
 #SBATCH --no-requeue
 
-WORKDIR="$HOME/WORK/lammps_ZrCu"
-cd "$WORKDIR"
+cd "$SLURM_SUBMIT_DIR"
 
 RATE_TAG="${RATE_TAG:-q1e12}"   # default: q1e12; override with --export
 
@@ -86,7 +85,7 @@ for strain in -0.006 -0.004 -0.002 0.000 0.002 0.004 0.006; do
 done
 
 echo "--- Fitting moduli ---"
-CONDA_DIR="$HOME/WORK/miniconda3"
+CONDA_DIR="$HOME/WORK/fyq/miniconda3"
 source "${CONDA_DIR}/etc/profile.d/conda.sh"
 conda activate ovito
 python fit_moduli.py --out "${OUTDIR}"

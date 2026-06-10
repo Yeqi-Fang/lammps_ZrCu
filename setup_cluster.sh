@@ -9,7 +9,7 @@
 set -euo pipefail
 
 WORKDIR="$HOME/WORK"
-CONDA_DIR="$WORKDIR/miniconda3"
+CONDA_DIR="$WORKDIR/fyq/miniconda3"
 MIRROR="https://pypi.tuna.tsinghua.edu.cn/simple/"
 
 echo "=== Step 1: Install Miniconda into $CONDA_DIR ==="
@@ -28,6 +28,9 @@ fi
 
 source "$CONDA_DIR/etc/profile.d/conda.sh"
 
+# libmamba solver is not available in this miniconda; force classic
+conda config --set solver classic
+
 echo "=== Step 2: Create 'ovito' conda environment ==="
 if conda env list | grep -q "^ovito "; then
   echo "'ovito' env already exists, skipping creation."
@@ -39,7 +42,9 @@ conda activate ovito
 
 echo "=== Step 3: Install Python packages (Tsinghua mirror) ==="
 pip install --upgrade pip -i "$MIRROR"
-pip install ovito numpy matplotlib pandas -i "$MIRROR"
+pip install ovito numpy matplotlib -i "$MIRROR"
+# pandas 2.3+ dropped manylinux2014 wheels; 2.2.3 is the last version with CentOS 7 support
+pip install "pandas==2.2.3" -i "$MIRROR"
 
 echo "=== Step 4: Verify OVITO import ==="
 python -c "import ovito; print('ovito', ovito.__version__, 'OK')"

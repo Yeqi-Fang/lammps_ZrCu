@@ -14,8 +14,7 @@
 #SBATCH -e stderr.analysis.%j
 #SBATCH --no-requeue
 
-WORKDIR="$HOME/WORK/lammps_ZrCu"
-cd "$WORKDIR"
+cd "$SLURM_SUBMIT_DIR"
 
 RATE_TAG="${RATE_TAG:-q1e12}"
 QUENCH_STEPS="${QUENCH_STEPS:-1700000}"
@@ -27,7 +26,7 @@ TAGS=(
   "N10000_seed3_${RATE_TAG}"
 )
 
-CONDA_DIR="$HOME/WORK/miniconda3"
+CONDA_DIR="$HOME/WORK/fyq/miniconda3"
 source "${CONDA_DIR}/etc/profile.d/conda.sh"
 conda activate ovito
 

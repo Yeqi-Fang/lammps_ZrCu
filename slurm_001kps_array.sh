@@ -12,8 +12,7 @@
 #SBATCH -e stderr.001kps.%A_%a
 #SBATCH --no-requeue
 
-WORKDIR="$HOME/WORK/lammps_ZrCu"
-cd "$WORKDIR"
+cd "$SLURM_SUBMIT_DIR"
 mkdir -p logs dumps restarts samples observables
 
 # quench_steps = round((2000-300) / 0.01 / 0.001) = 170,000,000
@@ -36,7 +35,7 @@ fi
 module load compilers/intel/oneapi-2023/config
 module load soft/lammps/lammps-22Dec2022
 
-mpirun -np 56 lmp_oneapi \
+mpirun -np $SLURM_NTASKS lmp_oneapi \
   -in  ZrCu_N10000_quench_template.lammps.eam \
   -var run_tag      "${TAG}" \
   -var seed         "${SEED}" \
