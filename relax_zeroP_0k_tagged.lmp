@@ -1,0 +1,45 @@
+# Relax a tagged 0 K glass to near-zero pressure before elastic modulus estimates.
+# Required command-line variable:
+#   -var run_tag TAG
+
+shell mkdir -p analysis_${run_tag}/moduli
+
+units           metal
+dimension       3
+boundary        p p p
+atom_style      atomic
+
+read_data       samples/Glass_Cu50Zr50_${run_tag}_0K_minimized.dat
+
+mass            1 63.546
+mass            2 91.224
+
+pair_style      eam/fs
+pair_coeff      * * Cu-Zr_4.eam.fs Cu Zr
+
+neighbor        2.0 bin
+neigh_modify    delay 0 every 1 check yes
+
+thermo          100
+thermo_style    custom step pe press pxx pyy pzz pxy vol density lx ly lz
+
+min_style       cg
+fix             relax all box/relax iso 0.0 vmax 0.001
+minimize        1.0e-10 1.0e-12 10000 100000
+unfix           relax
+
+write_data      analysis_${run_tag}/moduli/Glass_Cu50Zr50_${run_tag}_0K_zeroP.dat
+write_restart   analysis_${run_tag}/moduli/Glass_Cu50Zr50_${run_tag}_0K_zeroP.restart
+
+variable        p_GPa equal press*1.0e-4
+variable        pe_atom equal pe/atoms
+variable        vol_atom equal vol/atoms
+variable        box_vol equal vol
+variable        rho equal density
+variable        box_lx equal lx
+variable        box_ly equal ly
+variable        box_lz equal lz
+print           "# press_GPa pe_per_atom_eV vol_A3 vol_per_atom_A3 density_g_cm3 lx_A ly_A lz_A" file analysis_${run_tag}/moduli/zeroP_state.dat screen no
+print           "${p_GPa} ${pe_atom} ${box_vol} ${vol_atom} ${rho} ${box_lx} ${box_ly} ${box_lz}" append analysis_${run_tag}/moduli/zeroP_state.dat screen no
+
+print "ZERO_PRESSURE_RELAXATION_FINISHED ${run_tag}"

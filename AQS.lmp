@@ -1,0 +1,85 @@
+# CuZr glass AQS Shear - 40% Deformation
+units            metal
+boundary         p p p
+atom_style       atomic
+
+# --- Variables ---
+# Epsilon is the actual strain increment (dimensionless)
+variable         epsilon      equal 1e-4     
+variable         G            equal 22.07    # Shear Modulus in GPa
+# 40% total deformation / 1e-4 per step = 4000 steps
+variable         total_steps  equal 4000 
+variable         gpa_to_ev    equal 0.00062415 
+
+# --- Initialization ---
+if "$(is_defined(variable,START_STEP)) == 0" then "variable START_STEP equal 1"
+
+read_data        ../fix_vol/${fname}.dat
+pair_style       eam/alloy
+pair_coeff       * * potentials/ZrCuAl.lammps.eam Zr Cu
+
+# --- Computes ---
+compute          peall        all   pe
+compute          S            all   stress/atom NULL
+compute          pxy          all   reduce sum c_S[4]
+
+variable         tau          equal (c_pxy/vol)/10000
+variable         V            equal vol
+
+# Prepare box for shearing (Required for xy tilt)
+change_box       all   triclinic
+min_style        fire
+minimize         1e-15 1e-15 10000 10000
+
+# --- File Header ---
+if "${START_STEP} == 1" then &
+  "print 'strain_xy stress_gpa dE_Umut dE_Paper d_sigma' file Avalanches/avalanches_${fname}.dat"
+
+# --- AQS Loop ---
+variable         a equal ${START_STEP}
+label            aqs_loop
+
+    # --- 1. PRE-deformation State ---
+    run              0 
+    variable         E_before   equal $(c_peall)
+    variable         sigma_bef  equal $(v_tau)
+    
+    # --- 2. Apply Corrected Deformation ---
+    # delta (Angstroms) = strain * Current Box Height (ly)
+    variable         tilt_delta equal "(v_epsilon * ly)"
+    change_box       all xy delta ${tilt_delta} remap
+    
+    # --- 3. Sync AFTER deformation ---
+    run              0
+    variable         E_def      equal $(c_peall)
+    
+    # --- 4. Relax (Energy Minimization) ---
+    minimize         1e-12 1e-12 10000 10000
+    
+    # --- 5. Sync AFTER minimization ---
+    run              0
+    variable         E_after    equal $(c_peall)
+    variable         sigma_aft  equal $(v_tau)
+    variable         lx_val     equal lx
+    variable         xy_val     equal xy
+    variable         strain_xy  equal $(v_xy_val/v_lx_val)
+
+    # --- 6. Calculations ---
+    variable         n_atoms    equal $(atoms)
+    variable         dE_Umut    equal (v_E_def-v_E_after)/v_n_atoms
+    variable         work_ev    equal (v_V*v_sigma_bef*v_epsilon*v_gpa_to_ev)
+    variable         dE_Paper   equal ((v_E_before-v_E_after)+v_work_ev)/v_n_atoms
+    variable         d_sigma    equal (v_sigma_bef-v_sigma_aft)+(v_G*v_epsilon)
+
+    # --- 7. Diagnostics ---
+    print "Step ${a} | Strain: ${strain_xy} | Stress: ${sigma_aft} GPa"
+
+    # --- 8. Save Data ---
+    print "${strain_xy} ${sigma_aft} ${dE_Umut} ${dE_Paper} ${d_sigma}" append Avalanches/avalanches_${fname}.dat
+
+    # --- 9. Manual Loop Increment ---
+    if "${a} < ${total_steps}" then &
+      "variable a equal $(v_a + 1)" &
+      "jump SELF aqs_loop"
+# --- Final Success Signal for Bash ---
+print "SIMULATION_FINISHED_SUCCESSFULLY"

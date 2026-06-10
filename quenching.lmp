@@ -1,0 +1,63 @@
+#Rene Alvarez
+
+  variable  atom_sizes index 100000
+  label     loop_N 
+
+
+#------------------------------- Random number generator --------------------------------#
+
+  variable sample_id  loop 20 
+  label    loop_samples 
+
+# Initializes random number generator
+
+  clear
+
+  variable      rnd equal round(random(0,999999,${RANDOM}))
+
+# Simulation variables
+
+  variable        T         equal     2000
+
+# Time variables
+
+  variable        t_qu      equal     2000000          # Cooling rate 1 K/ps
+  variable        dt        equal     0.001            # Time step
+  variable        damp_t    equal     200*${dt}        # Thermostat damping
+  variable        damp_p    equal     2500*${dt}       # Barostat damping
+  variable        N         equal     ${atom_sizes}
+
+#----------------------------------------------------------------------------------------#
+
+  units           metal
+  atom_style      atomic
+  read_data       NpT_samples/Liquid_N_${N}.dat 
+  pair_style      eam/alloy
+  pair_coeff      * * potentials/ZrCuAl.lammps.eam Zr Cu 
+
+
+  variable        run_seed  equal   round(random(1,99999,${sample_id}*123))
+  velocity        all       create  2000  ${run_seed} mom yes rot yes dist gaussian
+
+
+#------------------                 Cooling at 1 K/ps          ----------------------------
+
+
+# Quenching 1000 K 
+
+ thermo 1000
+ variable         Temp   equal temp
+ variable         energy equal pe/atoms
+ variable         volume equal vol/atoms
+ fix              1  all npt temp $T 0.01 ${damp_t} iso 0.0 0.0 ${damp_p} fixedpoint 0.0 0.0 0.0
+# fix              2  all print 1000 "${Temp} ${energy} ${volume}" file Cooling_Zr50Cu50.dat
+ run ${t_qu}
+ write_restart    samples/Glass_N_${N}_s${sample_id}.dat
+ unfix  1
+# unfix   2
+
+
+next sample_id
+jump SELF loop_samples
+next atom_sizes
+jump SELF loop_N

@@ -1,0 +1,136 @@
+# Cu50Zr50 N10000 quench template — Mendelev 2019 Cu-Zr_4.eam.fs
+# Works for any quench rate; the shell script pre-computes quench_steps.
+#
+# Required command-line variables:
+#   -var run_tag     TAG            e.g. N10000_seed1_q1e11
+#   -var seed        INTEGER        e.g. 246813
+#   -var quench_steps INTEGER       e.g. 17000000 (for 0.1 K/ps)
+
+shell mkdir -p logs dumps restarts samples observables
+
+log logs/ZrCu_Cu50Zr50_${run_tag}.log
+
+variable N            equal 10000
+variable N_Cu         equal 5000
+variable N_Zr         equal 5000
+
+variable T_melt       equal 2000.0
+variable T_final      equal 300.0
+variable P_target     equal 0.0
+
+variable dt           equal 0.001       # ps = 1 fs in units metal
+variable melt_steps   equal 100000      # 100 ps
+variable eq_steps     equal 100000      # 100 ps final 300 K equilibration
+# quench_steps is passed via -var from the shell script
+
+variable Tdamp        equal 0.2         # ps
+variable Pdamp        equal 5.0         # ps
+variable dump_every   equal 20000       # 20 ps
+
+variable rho0         equal 0.060       # atoms/Angstrom^3
+variable L            equal (v_N/v_rho0)^(1.0/3.0)
+
+# ----------------------------- Initialization -----------------------------
+
+units          metal
+dimension      3
+boundary       p p p
+atom_style     atomic
+
+region         simbox block 0 ${L} 0 ${L} 0 ${L} units box
+create_box     2 simbox
+
+variable seed_zr  equal ${seed}+104729
+variable seed_vel equal ${seed}+224737
+
+create_atoms   1 random ${N_Cu} ${seed} simbox overlap 1.6 maxtry 200000
+create_atoms   2 random ${N_Zr} ${seed_zr} simbox overlap 1.6 maxtry 200000
+
+mass           1 63.546
+mass           2 91.224
+
+group          Cu type 1
+group          Zr type 2
+
+pair_style     eam/fs
+pair_coeff     * * Cu-Zr_4.eam.fs Cu Zr
+
+timestep       ${dt}
+neighbor       2.0 bin
+neigh_modify   delay 0 every 1 check yes
+
+thermo         1000
+thermo_modify  flush yes
+variable       pe_atom equal pe/atoms
+variable       ke_atom equal ke/atoms
+variable       vol_atom equal vol/atoms
+thermo_style   custom step time temp press pxx pyy pzz pxy pe ke etotal v_pe_atom v_ke_atom vol v_vol_atom density
+
+variable       obs_step equal step
+variable       obs_time equal time
+variable       obs_temp equal temp
+variable       obs_press equal press
+variable       obs_pxx equal pxx
+variable       obs_pyy equal pyy
+variable       obs_pzz equal pzz
+variable       obs_pxy equal pxy
+variable       obs_pe equal pe
+variable       obs_ke equal ke
+variable       obs_etotal equal etotal
+variable       obs_vol equal vol
+variable       obs_density equal density
+print          "# step time_ps temp_K press_bar pxx_bar pyy_bar pzz_bar pxy_bar pe_eV ke_eV etotal_eV pe_per_atom_eV ke_per_atom_eV vol_A3 vol_per_atom_A3 density_g_cm3" file observables/ZrCu_Cu50Zr50_${run_tag}_thermo.dat screen no
+
+# ----------------------------- Remove bad contacts -----------------------------
+
+min_style      cg
+minimize       1.0e-8 1.0e-8 10000 100000
+
+reset_timestep 0
+velocity       all create ${T_melt} ${seed_vel} mom yes rot yes dist gaussian
+
+dump           traj all custom ${dump_every} dumps/ZrCu_Cu50Zr50_${run_tag}.lammpstrj id type element x y z
+dump_modify    traj element Cu Zr sort id
+fix            obs all print 1000 "${obs_step} ${obs_time} ${obs_temp} ${obs_press} ${obs_pxx} ${obs_pyy} ${obs_pzz} ${obs_pxy} ${obs_pe} ${obs_ke} ${obs_etotal} ${pe_atom} ${ke_atom} ${obs_vol} ${vol_atom} ${obs_density}" append observables/ZrCu_Cu50Zr50_${run_tag}_thermo.dat screen no
+
+# ----------------------------- 2000 K melt, 100 ps -----------------------------
+
+fix            melt all npt temp ${T_melt} ${T_melt} ${Tdamp} iso ${P_target} ${P_target} ${Pdamp}
+run            ${melt_steps}
+unfix          melt
+
+write_data     samples/Liquid_Cu50Zr50_${run_tag}_2000K.dat
+write_restart  restarts/Liquid_Cu50Zr50_${run_tag}_2000K.restart
+
+# ----------------------------- Quench to 300 K (quench_steps from command line) -----------------------------
+
+fix            quench all npt temp ${T_melt} ${T_final} ${Tdamp} iso ${P_target} ${P_target} ${Pdamp}
+run            ${quench_steps}
+unfix          quench
+
+write_data     samples/Glass_Cu50Zr50_${run_tag}_300K_after_quench.dat
+write_restart  restarts/Glass_Cu50Zr50_${run_tag}_300K_after_quench.restart
+
+# ----------------------------- 300 K equilibration, 100 ps -----------------------------
+
+fix            eq all npt temp ${T_final} ${T_final} ${Tdamp} iso ${P_target} ${P_target} ${Pdamp}
+run            ${eq_steps}
+unfix          eq
+
+write_data     samples/Glass_Cu50Zr50_${run_tag}_300K_equilibrated.dat
+write_restart  restarts/Glass_Cu50Zr50_${run_tag}_300K_equilibrated.restart
+write_dump     all custom dumps/Glass_Cu50Zr50_${run_tag}_300K_equilibrated.dump id type x y z modify sort id
+
+undump         traj
+unfix          obs
+
+# ----------------------------- 0 K minimized structure for AQS/modulus -----------------------------
+
+min_style      fire
+minimize       1.0e-8 1.0e-10 10000 100000
+
+write_data     samples/Glass_Cu50Zr50_${run_tag}_0K_minimized.dat
+write_restart  restarts/Glass_Cu50Zr50_${run_tag}_0K_minimized.restart
+write_dump     all custom dumps/Glass_Cu50Zr50_${run_tag}_0K_minimized.dump id type x y z modify sort id
+
+print "SIMULATION_FINISHED_SUCCESSFULLY ${run_tag}"

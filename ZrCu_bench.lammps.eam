@@ -1,0 +1,56 @@
+# Short benchmark for Cu50Zr50 5000-atom EAM/FS melt run.
+# This file is intentionally small and writes no trajectory.
+
+log none
+
+variable seed       index 246813
+variable N          equal 5000
+variable N_Cu       equal 2500
+variable N_Zr       equal 2500
+variable T          equal 2000.0
+variable dt         equal 0.001
+variable bench_run  equal 5000
+variable Tdamp      equal 0.2
+variable Pdamp      equal 5.0
+variable rho0       equal 0.060
+variable L          equal (v_N/v_rho0)^(1.0/3.0)
+
+units          metal
+dimension      3
+boundary       p p p
+atom_style     atomic
+
+region         simbox block 0 ${L} 0 ${L} 0 ${L} units box
+create_box     2 simbox
+
+variable seed_zr  equal ${seed}+104729
+variable seed_vel equal ${seed}+224737
+
+create_atoms   1 random ${N_Cu} ${seed} simbox overlap 1.6 maxtry 100000
+create_atoms   2 random ${N_Zr} ${seed_zr} simbox overlap 1.6 maxtry 100000
+
+mass           1 63.546
+mass           2 91.224
+
+pair_style     eam/fs
+pair_coeff     * * Cu-Zr_4.eam.fs Cu Zr
+
+timestep       ${dt}
+neighbor       2.0 bin
+neigh_modify   delay 0 every 1 check yes
+
+thermo         5000
+thermo_style   custom step time temp press pe etotal vol density
+
+min_style      cg
+minimize       1.0e-8 1.0e-8 10000 100000
+
+reset_timestep 0
+velocity       all create ${T} ${seed_vel} mom yes rot yes dist gaussian
+
+timer          full
+fix            bench all npt temp ${T} ${T} ${Tdamp} iso 0.0 0.0 ${Pdamp}
+run            ${bench_run}
+unfix          bench
+
+print "BENCHMARK_FINISHED_SUCCESSFULLY"

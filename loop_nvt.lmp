@@ -1,0 +1,60 @@
+# --- Variables ---
+
+variable        T       index 0.01    
+variable        t_eq    equal 10000   
+variable        fname   index sample  
+
+variable        dt      equal 0.001
+variable        damp_t  equal 200*${dt}
+variable        damp_p  equal 5000*${dt}
+
+# --- Setup ---
+
+units           metal
+atom_style      atomic
+read_restart    samples/${fname}.dat  
+
+pair_style      eam/alloy
+pair_coeff      * * potentials/ZrCuAl.lammps.eam Zr Cu
+timestep        ${dt}
+
+# --- NPT Phase (To find the average volume) ---
+
+thermo          10
+fix             1 all npt temp $T $T 0.10 iso 0.0 0.0 5.0 fixedpoint 0.0 0.0 0.0
+
+variable        dx equal lx
+variable        dy equal ly
+variable        dz equal lz
+
+# Vector fixes to store dimensions for averaging
+fix             2 all vector 1 v_dx
+fix             3 all vector 1 v_dy
+fix             4 all vector 1 v_dz
+
+run             ${t_eq}
+
+# Calculate averages
+variable        lx_med equal (ave(f_2))
+variable        ly_med equal (ave(f_3))
+variable        lz_med equal (ave(f_4))
+
+unfix           1
+
+# --- Transition to NVT ---
+# This resizes the box to the average size found during NPT
+change_box      all x final 0 ${lx_med} y final 0 ${ly_med} z final 0 ${lz_med} remap units box
+
+unfix           2
+unfix           3
+unfix           4
+
+reset_timestep  0
+
+# Final NVT Production/Equilibration
+
+fix             1 all nvt temp $T $T ${damp_t}
+dump            data all xyz 100 ${fname}_NVT.xyz
+run             ${t_eq}
+
+write_data      fix_vol/${fname}_NVT_final.dat

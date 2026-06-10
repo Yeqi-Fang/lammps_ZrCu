@@ -1,0 +1,40 @@
+# 0 K AQS yz shear response from zero-pressure relaxed glass.
+# Pass strain with: -var strain VALUE
+
+variable        strain index 0.0
+
+log             none
+
+units           metal
+dimension       3
+boundary        p p p
+atom_style      atomic
+
+read_data       analysis/moduli/Glass_Cu50Zr50_N5000_0K_zeroP.dat
+
+mass            1 63.546
+mass            2 91.224
+
+pair_style      eam/fs
+pair_coeff      * * Cu-Zr_4.eam.fs Cu Zr
+
+neighbor        2.0 bin
+neigh_modify    delay 0 every 1 check yes
+
+thermo          1000
+thermo_style    custom step pe press pyz vol yz
+
+variable        lz0 equal lz
+variable        dyz equal ${strain}*v_lz0
+change_box      all triclinic
+change_box      all yz delta ${dyz} remap units box
+
+min_style       fire
+minimize        1.0e-10 1.0e-12 10000 100000
+
+variable        tau_GPa equal -pyz*1.0e-4
+variable        pyz_GPa equal pyz*1.0e-4
+variable        pe_atom equal pe/atoms
+variable        box_vol equal vol
+variable        box_yz equal yz
+print           "${strain} ${tau_GPa} ${pyz_GPa} ${pe_atom} ${box_vol} ${box_yz}" append analysis/moduli/shear_yz_stress.dat screen no

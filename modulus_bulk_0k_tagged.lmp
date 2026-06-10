@@ -1,0 +1,35 @@
+# 0 K isotropic volumetric strain response from a tagged zero-pressure relaxed glass.
+# Required command-line variables:
+#   -var run_tag TAG -var strain VALUE
+
+units           metal
+dimension       3
+boundary        p p p
+atom_style      atomic
+
+read_data       analysis_${run_tag}/moduli/Glass_Cu50Zr50_${run_tag}_0K_zeroP.dat
+
+mass            1 63.546
+mass            2 91.224
+
+pair_style      eam/fs
+pair_coeff      * * Cu-Zr_4.eam.fs Cu Zr
+
+neighbor        2.0 bin
+neigh_modify    delay 0 every 1 check yes
+
+thermo          1000
+thermo_style    custom step pe press vol density lx ly lz
+
+variable        scale equal (1.0+${strain})^(1.0/3.0)
+change_box      all x scale ${scale} y scale ${scale} z scale ${scale} remap units box
+
+min_style       fire
+minimize        1.0e-10 1.0e-12 10000 100000
+
+variable        hydro_GPa equal -press*1.0e-4
+variable        press_GPa equal press*1.0e-4
+variable        pe_atom equal pe/atoms
+variable        box_vol equal vol
+variable        rho equal density
+print           "${strain} ${hydro_GPa} ${press_GPa} ${pe_atom} ${box_vol} ${rho}" append analysis_${run_tag}/moduli/bulk_stress.dat screen no
